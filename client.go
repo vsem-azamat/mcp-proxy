@@ -468,11 +468,13 @@ func (c *Client) callTool(ctx context.Context, request mcp.CallToolRequest) (*mc
 	}
 	callCtx, cancel := c.withRequestTimeout(ctx)
 	defer cancel()
+	callStart := time.Now()
 	result, err := cl.CallTool(callCtx, request)
 	if err != nil {
 		return nil, c.redactor.toolError(ctx, request, redactURLCredentials(err))
 	}
-	return c.redactor.toolResult(ctx, request, result), nil
+	result = c.redactor.toolResult(ctx, request, result)
+	return c.redactor.scanToolFile(request, result, callStart), nil
 }
 
 // drainStderr keeps reading a stdio subprocess's stderr for as long as it runs.

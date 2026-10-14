@@ -203,6 +203,24 @@ type RedactConfig struct {
 	HighEntropy bool `json:"highEntropy,omitempty"`
 	// DisableRules lists rule kinds to skip, e.g. ["jwt"].
 	DisableRules []string `json:"disableRules,omitempty"`
+
+	// The fields below belong to the local secret escrow (escrow.go). They
+	// only take effect when MCP_HUB_ESCROW_KEY_SHA256 is set.
+
+	// EscrowTTL is how long a redacted value stays retrievable. Default 24h.
+	EscrowTTL Duration `json:"escrowTTL,omitempty"`
+	// EscrowMaxEntries caps the escrow size; only read from
+	// mcpProxy.options.redact. Default 1000; the oldest entry is evicted.
+	EscrowMaxEntries int `json:"escrowMaxEntries,omitempty"`
+	// FileTools names tools that download a file and report its local path.
+	// A downloaded file that contains secrets is withheld from the result.
+	FileTools []string `json:"fileTools,omitempty"`
+	// FileRoots are the directories downloads land in. Only files under them,
+	// written during the call, are scanned; without roots nothing is.
+	FileRoots []string `json:"fileRoots,omitempty"`
+	// FileMaxBytes bounds the size of a downloaded file that is scanned.
+	// Default 20 MiB; larger files pass through unscanned.
+	FileMaxBytes int64 `json:"fileMaxBytes,omitempty"`
 }
 
 type OptionsV2 struct {
@@ -423,6 +441,12 @@ func validateRedact(field string, redact *RedactConfig) error {
 	if !redact.Enabled && (redact.HighEntropy || len(redact.DisableRules) > 0) {
 		slog.Warn(field+" has settings but enabled is false, so nothing is redacted for it", "field", field)
 	}
+	if err := validateDuration(field+".escrowTTL", redact.EscrowTTL); err != nil {
+		return err
+	}
+	if redact.EscrowMaxEntries < 0 || redact.FileMaxBytes < 0 {
+		return fmt.Errorf("%s: escrowMaxEntries and fileMaxBytes cannot be negative", field)
+	}
 	known := redactionRuleKinds()
 	for i, kind := range redact.DisableRules {
 		if !slices.Contains(known, kind) {
@@ -455,6 +479,9 @@ func validateServerName(name string) error {
 	}
 	if strings.ContainsAny(name, serverNameForbiddenChars) {
 		return fmt.Errorf("mcpServers[%q]: name is part of a URL route and cannot contain any of %q", name, serverNameForbiddenChars)
+	}
+	if first, _, _ := strings.Cut(name, "/"); first == strings.Trim(escrowRoute, "/") {
+		return fmt.Errorf("mcpServers[%q]: the route %s is reserved for the secret escrow", name, escrowRoute)
 	}
 	if path.Join("/", name) != "/"+name {
 		return fmt.Errorf("mcpServers[%q]: name must be a clean relative path, without %q, %q, a leading %q, or empty segments", name, "..", ".", "/")

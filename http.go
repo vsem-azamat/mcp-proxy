@@ -277,6 +277,7 @@ func startHTTPServer(config *Config) error {
 	}
 	httpMux.HandleFunc("GET /_healthz", healthHandler(config, nil))
 	httpMux.HandleFunc("GET /_readyz", healthHandler(config, readiness))
+	setupEscrow(ctx, httpMux, config)
 
 	for name, clientConfig := range config.McpServers {
 		if clientConfig.Options.Disabled {

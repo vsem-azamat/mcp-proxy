@@ -202,13 +202,13 @@ type rawDownstream struct {
 
 	// Optional descriptor/metadata controls. Zero values preserve the original
 	// empty-catalog behaviour.
-	toolExecution     map[string]any    // attached to every listed tool when set
-	toolsRaw          json.RawMessage   // verbatim tools array; overrides tools when set
-	resourceTemplates []map[string]any  // raw templates; []any{} when nil
-	prompts           []string          // prompt names; none when nil
-	resources         []string          // resource URIs; none when nil
-	resourceNames     map[string]string // resource URI -> name; the URI when unset
-	hangMethods       map[string]bool   // methods that accept and never answer
+	toolExecution     map[string]any             // attached to every listed tool when set
+	toolsRaw          json.RawMessage            // verbatim tools array; overrides tools when set
+	resourceTemplates []map[string]any           // raw templates; []any{} when nil
+	prompts           []string                   // prompt names; none when nil
+	resources         []string                   // resource URIs; none when nil
+	resourceNames     map[string]string          // resource URI -> name; the URI when unset
+	hangMethods       map[string]bool            // methods that accept and never answer
 	methodResults     map[string]json.RawMessage // verbatim result per method, e.g. tools/call
 
 	server *httptest.Server
