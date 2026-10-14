@@ -185,6 +185,8 @@ const (
 	ToolFilterModeBlock ToolFilterMode = "block"
 )
 
+// ToolFilterConfig is the allow/block list shape shared by toolFilter,
+// resourceFilter and promptFilter.
 type ToolFilterConfig struct {
 	Mode ToolFilterMode `json:"mode,omitempty"`
 	List []string       `json:"list,omitempty"`
@@ -208,6 +210,14 @@ type OptionsV2 struct {
 	LogEnabled     optional.Field[bool] `json:"logEnabled"`
 	AuthTokens     []string             `json:"authTokens,omitempty"`
 	ToolFilter     *ToolFilterConfig    `json:"toolFilter,omitempty"`
+	// ResourceFilter selects which resources and resource templates are
+	// exposed. List entries match a resource's URI or name, or a template's
+	// uriTemplate or name. Unlike toolFilter, mode=allow with an empty list
+	// exposes nothing: there is no older behaviour to preserve.
+	ResourceFilter *ToolFilterConfig `json:"resourceFilter,omitempty"`
+	// PromptFilter selects which prompts are exposed, by prompt name, with the
+	// same semantics as ResourceFilter.
+	PromptFilter *ToolFilterConfig `json:"promptFilter,omitempty"`
 	// Redact scans downstream results for credentials and replaces them. A
 	// server without its own redact block inherits mcpProxy.options.redact.
 	Redact   *RedactConfig `json:"redact,omitempty"`
@@ -379,16 +389,28 @@ func validateOptions(field string, options *OptionsV2) error {
 	if err := validateRedact(field+".redact", options.Redact); err != nil {
 		return err
 	}
-	if options.ToolFilter == nil {
+	if err := validateFilter(field+".toolFilter", options.ToolFilter); err != nil {
+		return err
+	}
+	if err := validateFilter(field+".resourceFilter", options.ResourceFilter); err != nil {
+		return err
+	}
+	return validateFilter(field+".promptFilter", options.PromptFilter)
+}
+
+// validateFilter checks one allow/block list. A nil filter is valid and means
+// "no filtering".
+func validateFilter(field string, filter *ToolFilterConfig) error {
+	if filter == nil {
 		return nil
 	}
-	mode := ToolFilterMode(strings.ToLower(string(options.ToolFilter.Mode)))
+	mode := ToolFilterMode(strings.ToLower(string(filter.Mode)))
 	if mode != ToolFilterModeAllow && mode != ToolFilterModeBlock {
-		return fmt.Errorf("%s.toolFilter.mode must be %q or %q", field, ToolFilterModeAllow, ToolFilterModeBlock)
+		return fmt.Errorf("%s.mode must be %q or %q", field, ToolFilterModeAllow, ToolFilterModeBlock)
 	}
-	for i, toolName := range options.ToolFilter.List {
-		if strings.TrimSpace(toolName) == "" {
-			return fmt.Errorf("%s.toolFilter.list[%d] cannot be empty", field, i)
+	for i, name := range filter.List {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("%s.list[%d] cannot be empty", field, i)
 		}
 	}
 	return nil
@@ -473,6 +495,22 @@ func validateConfig(config *Config) error {
 	}
 	if err := validateOptions("mcpProxy.options", proxy.Options); err != nil {
 		return err
+	}
+	if options := proxy.Options; options != nil {
+		// Filters are per-server only. Rejecting them here would break configs
+		// that have always loaded, so a filter that does nothing is reported.
+		for _, filter := range []struct {
+			field string
+			set   bool
+		}{
+			{"toolFilter", options.ToolFilter != nil},
+			{"resourceFilter", options.ResourceFilter != nil},
+			{"promptFilter", options.PromptFilter != nil},
+		} {
+			if filter.set {
+				slog.Warn("mcpProxy.options."+filter.field+" is not inherited and has no effect; set it on each server instead", "field", "mcpProxy.options."+filter.field)
+			}
+		}
 	}
 
 	for name, serverConfig := range config.McpServers {
