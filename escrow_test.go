@@ -257,6 +257,7 @@ func TestRussianLabels(t *testing.T) {
 		"пароль от почты: mail-Pw-1":                                "mail-Pw-1",
 		"пароль к wifi — Wifi2026x":                                 "Wifi2026x",
 		"Пароль:\nNextLine-77":                                      "NextLine-77",
+		`Логин: bob\nПароль: escaped-Nl-77`:                         "escaped-Nl-77",
 		"Пароли: first-Pw-1":                                        "first-Pw-1",
 		"ключ доступа: acc-key-9911":                                "acc-key-9911",
 		"пароль -- dash-Pw-2":                                       "dash-Pw-2",
