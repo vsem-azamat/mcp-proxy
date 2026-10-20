@@ -430,7 +430,7 @@ var builtinRedactionRules = []*redactionRule{
 	},
 	{
 		kind:     "telegram_bot_token",
-		re:       regexp.MustCompile(`\b(?:bot)?(\d{6,12}:[A-Za-z0-9_\-]{35})(?:[^A-Za-z0-9_\-]|$)`),
+		re:       regexp.MustCompile(`\b(?:bot)?(\d{6,16}:[A-Za-z0-9_\-]{35})(?:[^A-Za-z0-9_\-]|$)`),
 		groups:   []int{1},
 		precheck: hasDigitColonRun,
 	},
@@ -709,11 +709,42 @@ func (f finding) value(text string) string {
 	return raw
 }
 
-// find returns the non-overlapping findings in text, ordered by position.
+// maskEscapedBreaks returns text with each escaped line break or tab (\n, \r,
+// \t written as a backslash and a letter, as in JSON, a log or a repr that was
+// not decoded) replaced by two NUL bytes, so it has the same length. NUL is no
+// word character, so the rules see a boundary before what follows ("API:\n123:AA…"
+// left none between n and the digit), and it is no line break, quote or
+// backslash, so a quoted value that contains one still ends at its quote. An
+// escaped backslash (\\n) is left alone.
+func maskEscapedBreaks(text string) string {
+	if !strings.Contains(text, "\\") {
+		return text
+	}
+	b := []byte(text)
+	for i := 0; i < len(b); i++ {
+		if b[i] != '\\' {
+			continue
+		}
+		j := i
+		for j < len(b) && b[j] == '\\' {
+			j++
+		}
+		if (j-i)%2 == 1 && j < len(b) && (b[j] == 'n' || b[j] == 'r' || b[j] == 't') {
+			b[j-1], b[j] = 0, 0
+		}
+		i = j - 1
+	}
+	return string(b)
+}
+
+// find returns the non-overlapping findings in text, ordered by position. The
+// rules run on text with its escaped line breaks masked (see maskEscapedBreaks),
+// which keeps every position, so the findings cut the original text.
 func (r *redactor) find(text string) []finding {
 	if text == "" {
 		return nil
 	}
+	text = maskEscapedBreaks(text)
 	var lowered string
 	var kept []finding
 	for priority, rule := range r.rules {
